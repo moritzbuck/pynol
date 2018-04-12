@@ -1,16 +1,13 @@
 # File: Genomic.py
 
-from Nucleotide import Nucleotide
+from pynol.common.sequence.Nucleotide import Nucleotide
 
-class Genomic(Nucleotide):
+class Genomic( Nucleotide ):
 
 # Attributes: Instance
 
     def __init__(self):
-        self.alphabet = 'ATGC'  # string
-        self.type = None  # string
+        super(Nucleotide, self).__init__()
         self.type = None  # string
 
 # Operations
-
-

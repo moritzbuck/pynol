@@ -1,13 +1,16 @@
 # File: Sequence.py
+import persistent
 
-class Sequence:
+class Sequence( persistent.Persistent ):
+    count = 0
 
 # Attributes: Instance
 
+
     def __init__(self):
-        self.sequence = None  # string
-        self.alphabet = None  # string
+        self.id = Sequence.count
+        Sequence.count += 1
+        self.pretty_id = None
+        self.other_ids = {}
 
 # Operations
-
-
