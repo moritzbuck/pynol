@@ -6,6 +6,9 @@ from Bio.Seq import Seq
 import ZODB, ZODB.FileStorage
 import transaction
 from pynol.common.sequence.Genomic import Genomic
+from pynol.common.genome.Genome import Genome
+from pynol.common.genome.source import FromFile
+
 
 base = pjoin(os.environ['HOME'], 'repos/moritz/pynol')
 

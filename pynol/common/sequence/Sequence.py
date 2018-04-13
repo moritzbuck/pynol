@@ -1,15 +1,10 @@
 # File: Sequence.py
-import persistent
+from pynol.common.Record import Record
 
-class Sequence( persistent.Persistent ):
-    count = 0
+class Sequence( Record ):
 
 # Attributes: Instance
-
-
     def __init__(self):
-        self.id = Sequence.count
-        Sequence.count += 1
         self.pretty_id = None
         self.other_ids = {}
 
