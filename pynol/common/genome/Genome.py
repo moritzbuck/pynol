@@ -18,6 +18,31 @@ class Genome( Thingy ):
     def populate(self):
         self.contigs = self.source.get_data(self)
 
+    @classmethod
+    def FromUBAFile(cls,file_name, UBA_id, gtdb_taxon_string):
+        genome = cls()
+        genome.name = UBA_id
+        genome.source = FromFile.FromFile(file_name)
+        genome.taxonomy = {}
+        genome.taxonomy['gtdb'] = gtdb_taxon_string
+        genome.other_ids = {}
+        genome.other_ids['uba_id'] = UBA_id
+        genome.populate()
+        genome.save()
+        return genome
+
+    @classmethod
+    def FromRefSeq(cls, refseq_id, gtdb_taxon_string, ncbi_taxon_str = None):
+        genome = cls()
+        genome.name = refseq_id
+        genome.source = FromRefSeq.FromRefSeq(s[0])
+        genome.taxonomy['ncbi'] = ncbi_taxon_str
+        genome.taxonomy['gtdb'] = gtdb_taxon_string
+        genome.populate()
+        genome.save()
+        return genome
+
+
     @property
     def source(self):
         source_class = getattr(sys.modules[__name__], self._source_class)

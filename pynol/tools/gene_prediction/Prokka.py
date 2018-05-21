@@ -6,6 +6,10 @@ from pynol.tools.slurm import Slurm
 from os.path import join as pjoin
 from Bio import SeqIO
 import os
+from pynol.common.sequence.Feature import Feature
+from pynol.common.sequence.RNA import RNA
+from pynol.common.sequence.CDS import CDS
+
 
 class Prokka( Tool, Slurm ):
 
@@ -25,22 +29,33 @@ class Prokka( Tool, Slurm ):
         stuff = self.run(genome, '/home/moritz/temp/' + genome.name)
         stuff['command'] = """module load bioinfo-tools
 module load prokka
+mkdir {dones}
 mkdir {path}
-{command}""".format(command = stuff['command'], path = '/home/moritz/temp/' + genome.name)
+{command}
+mv {path} {dones}
+""".format(command = stuff['command'], path = '/home/moritz/temp/' + genome.name, dones = '/home/moritz/temp/prokkas/')
 
         Slurm.run_remote(self, job_name = "Prokka_" + genome.name, command = stuff['command'], files = stuff['files'], threads = 4)
 
     def retrieve_data(self, genome):
-        gbk_file = pjoin('/tmp/',genome.name, genome.name + ".gbk")
-        Slurm.retrieve_data(self, files = [genome.name], folder = '/home/moritz/temp/')
+        gbk_file = pjoin('/tmp/', genome.name + ".gff")
+        Slurm.retrieve_data(self, files = [genome.name + ".gff"], folder = '/home/moritz/temp/prokkas/' + genome.name)
 
-        #clean prokka but with gbk header
-        nb_ctgs = len(genome.contigs)
+        with open(gbk_file) as handle:
+            lines = [l.strip().split("\t") for l in handle if l[0] != "#" and "\t" in l
+            ]
 
-        sed = "sed -i 's/\/{counts}/\/{counts}\t/' {gbk}"
+        all_feats = {}
+        for l in lines :
+            if l[2] == "CDS" :
+                feat = CDS.fromGFFline(l)
+                all_feats[feat.pretty_id] = feat
+            elif "RNA" in l[2] :
+                feat = RNA.fromGFFline(l)
+                all_feats[feat.pretty_id] = feat
+            else :
+                print("Feature of type ", l[2], " with no specific class")
+                feat = Feature.fromGFFline(l)
+                all_feats[feat.pretty_id] = feat
 
-        sed = sed.format(counts = nb_ctgs, gbk = gbk_file)
-
-        os.system(sed)
-
-        return [s for s in SeqIO.parse(gbk_file, "genbank")]
+        return all_feats
