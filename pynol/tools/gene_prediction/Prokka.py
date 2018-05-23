@@ -40,22 +40,24 @@ mv {path} {dones}
     def retrieve_data(self, genome):
         gbk_file = pjoin('/tmp/', genome.name + ".gff")
         Slurm.retrieve_data(self, files = [genome.name + ".gff"], folder = '/home/moritz/temp/prokkas/' + genome.name)
-
+        if not os.path.exists(gbk_file):
+            return "Not run or crashed"
         with open(gbk_file) as handle:
             lines = [l.strip().split("\t") for l in handle if l[0] != "#" and "\t" in l
             ]
 
-        all_feats = {}
+        all_feats = {'CDS' : {}, 'RNA' : {}, 'other' : {}}
+
         for l in lines :
             if l[2] == "CDS" :
                 feat = CDS.fromGFFline(l)
-                all_feats[feat.pretty_id] = feat
+                all_feats['CDS'][feat.pretty_id] = feat.id
             elif "RNA" in l[2] :
                 feat = RNA.fromGFFline(l)
-                all_feats[feat.pretty_id] = feat
+                all_feats['RNA'][feat.pretty_id] = feat.id
             else :
                 print("Feature of type ", l[2], " with no specific class")
                 feat = Feature.fromGFFline(l)
-                all_feats[feat.pretty_id] = feat
+                all_feats['other'][feat.pretty_id] = feat.id
 
         return all_feats

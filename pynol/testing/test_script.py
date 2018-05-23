@@ -8,6 +8,9 @@
     from pynol.common.genome.sources.FromFile import FromFile
     from pynol.common.taxonomy.Taxonomy import Taxonomy
     from pynol.database.PynolDB import PynolDB
+    from pynol.common.sequence.RNA import RNA
+    from pynol.common.sequence.CDS import CDS
+    from pynol.common.sequence.Feature import Feature
     import pynol
     from tqdm import tqdm
     from pynol.tools.gene_prediction.Prokka import Prokka
@@ -21,7 +24,19 @@
 
     test_genome = Genome.find_one({'_name' : "UBA9650"})
 
-    prok = Prokka.make()
+    prok = Prokka.find_one()
+
+    for f in list(RNA.find()):
+        RNA.delete(f)
+
+    for f in list(CDS.find()):
+        CDS.delete(f)
+
+    for f in list(Feature.find()):
+        Feature.delete(f)
+
+    search_string = "^{tax_string}.*".format(tax_string = taxonomy['p__Patescibacteria'].get_tax_string(full = True))
+    tt = list(Genome.find({'taxonomy.gtdb' : {'$regex' : search_string}}))
 
     with open("test_data/caulos.tsv") as handle:
         ids = [s.strip().replace('"', '').split("\t") for s in handle.readlines()]

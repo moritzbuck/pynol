@@ -57,13 +57,7 @@ class Genome( Thingy ):
 
     @property
     def contigs(self):
-        return list(Genomic.find({'_pretty_id' : {'$in' : self._contigs}}))
-
-    @contigs.setter
-    def contigs(self, contigs):
-        assert all([c.__class__ == Genomic for c in contigs])
-        self._contigs = [c.pretty_id for c in contigs]
-        self._checksum = self.checksum
+        return list(Genomic.find({'genome' : self.id}))
 
     @property
     def checksum(self):
@@ -101,6 +95,16 @@ class Genome( Thingy ):
     def to_fasta(self, file):
         to_seq_record = lambda c : SeqRecord(id = c.pretty_id, description = "", seq = c.sequence)
         contigs = [to_seq_record(c) for c in self.contigs]
+        with open(file, "w") as handle:
+            SeqIO.write(contigs, handle, "fasta")
+
+    def proteom(self, file, pretty = False):
+        if pretty:
+            to_seq_record = lambda c : SeqRecord(id = c.pretty_id, description = "", seq = c.sequence)
+        else :
+            to_seq_record = lambda c : SeqRecord(id = c.id, description = "", seq = c.sequence)
+
+        cdss = CDS.find({'genome' : self.id})
         with open(file, "w") as handle:
             SeqIO.write(contigs, handle, "fasta")
 

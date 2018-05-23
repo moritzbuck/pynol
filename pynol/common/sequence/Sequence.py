@@ -3,9 +3,6 @@ import hashlib
 from Bio.Seq import Seq
 from mongo_thingy import Thingy
 import re
-import uuid
-
-
 
 class Sequence( Thingy ):
 
@@ -29,8 +26,8 @@ class Sequence( Thingy ):
 
     @pretty_id.setter
     def pretty_id(self, pretty_id):
-        assert bool(re.match('^[A-Za-z0-9:/_.]+$', pretty_id)), "please use only alphanumeric characters of underscore or dot for names and column as separator"
-        assert len(pretty_id) < 37
+        assert bool(re.match('^[A-Za-z0-9:;/_.]+$', pretty_id)), "please use only alphanumeric characters of underscore or dot for names and column or semi-column as separator"
+        #assert len(pretty_id) < 37
         self._pretty_id = pretty_id
 
     def save(self) :

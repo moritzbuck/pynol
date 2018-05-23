@@ -30,5 +30,6 @@ class Source( Thingy ):
         pads = len(str(len(contigs)))
         for i, s in enumerate(contigs):
             s.pretty_id = "{name}:contig:{i}/{len}".format(name = genome.name, i = str(i+1).zfill(pads), len = len(contigs))
+            s.genome = genome.id
             s.save()
         return contigs
