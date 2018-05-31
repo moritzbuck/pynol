@@ -3,6 +3,7 @@ from pynol.common.sequence.Genomic import Genomic
 from Bio import SeqIO
 from Bio.Alphabet import DNAAlphabet
 import re
+from os.path import splitext
 
 class FromFile(Source):
     """docstring for FromFile."""
@@ -22,4 +23,9 @@ class FromFile(Source):
         self._file_name = file_name
 
     def get_seqio_genome_parser(self) :
-        return SeqIO.parse(self.file_name, "fasta", alphabet = DNAAlphabet())
+        file_name,extension = splitext(self.file_name)
+        if extension == ".gbff" :
+            typ = "genbank"
+        else :
+            typ = "fasta"
+        return SeqIO.parse(self.file_name, typ, alphabet = DNAAlphabet())

@@ -1,5 +1,14 @@
 class Taxon():
 
+    def __getitem__(self, key):
+        if not type(key) == int :
+            key = Taxon.levels[key]
+        if self.level == key:
+            return self
+        else :
+            return self.parent[key]
+
+
     def __repr__(self):
         repr_string = "{name} : {level} --- {string}"
         return repr_string.format(name = self.name, level = Taxon.rev_leves[self.level], string = self.get_tax_string())
@@ -44,6 +53,22 @@ class Taxon():
     "s" : 7
     }
 
+    def __iter__(self):
+        self.next = self
+        return self
+
+    def tail(self):
+        return Taxon.prefixes[self.level] + self.name
+
+    def __next__(self):
+        if self.next.level != 1 :
+            old_next = self.next
+            self.next = old_next.parent
+            return old_next
+        else:
+            self.next = None
+            raise StopIteration
+
     def __init__(self, level, name, parent):
         self.name = name
         self.parent = parent
@@ -54,6 +79,19 @@ class Taxon():
             return self.parent.get_tax_string(full) + ";" + (Taxon.prefixes[self.level] if full else "") + self.name
         else :
             return (Taxon.prefixes[self.level] if full else "") + self.name
+
+    def get_parent(self, level, full = False):
+        if type(level) != int:
+            level = Taxon.levels[level]
+
+        if level > self.level:
+            return None
+
+        if level == self.level:
+            return (Taxon.prefixes[self.level] if full else "") + self.name
+
+        return self.parent.get_parent(level, full)
+
 
     def is_child(self, parent):
         if self == parent:

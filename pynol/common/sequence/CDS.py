@@ -11,5 +11,6 @@ class CDS( Feature ):
         obj.save()
         return obj
 
-    def get_prot(self):
+    @property
+    def protein(self):
         return self.sequence.translate()

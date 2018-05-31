@@ -3,6 +3,10 @@ from pynol.common.sequence.Genomic import Genomic
 from pynol.common.genome.sources.Source import Source
 from pynol.common.genome.sources.FromRefSeq import FromRefSeq
 from pynol.common.genome.sources.FromFile import FromFile
+from pynol.common.sequence.CDS import CDS
+from pynol.common.COGs.COG import COG
+from bson.objectid import ObjectId
+
 
 import hashlib
 from pynol import PYNOL
@@ -16,7 +20,7 @@ class Genome( Thingy ):
 
 # Attributes: Instance
     def populate(self):
-        self.contigs = self.source.get_data(self)
+        self.source.get_data(self)
 
     @classmethod
     def FromUBAFile(cls,file_name, UBA_id, gtdb_taxon_string):
@@ -42,6 +46,18 @@ class Genome( Thingy ):
         genome.save()
         return genome
 
+    @classmethod
+    def FromRawFile(cls,name, file_name, whatever_id, gtdb_taxon_string, additional_info = {}):
+        genome = cls()
+        genome.name = name
+        genome.source = FromFile.FromFile(file_name)
+        genome.taxonomy = {}
+        genome.other_ids = {}
+        assert type(whatever_id) == dict, "whatever_id needs to be a dictionary with id type as key and ids as value"
+        genome.other_ids = whatever_id
+        genome.populate()
+        genome.save()
+        return genome
 
     @property
     def source(self):
@@ -60,6 +76,11 @@ class Genome( Thingy ):
         return list(Genomic.find({'genome' : self.id}))
 
     @property
+    def length(self):
+        return sum([len(l._sequence) for l in self.contigs])
+
+
+    @property
     def checksum(self):
         chks = sorted([f.checksum for f in self.contigs])
         sums = "".join(chks).encode('utf-8')
@@ -67,9 +88,10 @@ class Genome( Thingy ):
 
     @property
     def proteins(self):
-        if not self.contigs[0]:
-            self.predict_proteins()
-        return sum([c.proteins for c in self.contigs],[])
+        cdss = list(CDS.find({ 'genome' : self.id }))
+        if len(cdss) == 0:
+            print('WARNING : {genome} has no proteins, probably genome prediction has not been run'.format(genome = self.name), file = sys.stderr)
+        return cdss
 
 
     @property
@@ -89,27 +111,30 @@ class Genome( Thingy ):
             assert not self.__class__.find_one({'_id' : self.pretty_id}), "The genome is already in the db and has an id of {check}".format(check = self.pretty_id)
         Thingy.save(self)
 
-    def predict_proteins(self):
-        print("Predicting proteins")
-
-    def to_fasta(self, file):
-        to_seq_record = lambda c : SeqRecord(id = c.pretty_id, description = "", seq = c.sequence)
-        contigs = [to_seq_record(c) for c in self.contigs]
-        with open(file, "w") as handle:
-            SeqIO.write(contigs, handle, "fasta")
-
-    def proteom(self, file, pretty = False):
-        if pretty:
-            to_seq_record = lambda c : SeqRecord(id = c.pretty_id, description = "", seq = c.sequence)
+    def write_fasta(self, file, pretty = False):
+        prots = file.split(".")[-1] == "faa"
+        if prots :
+            seqs = self.proteins
         else :
-            to_seq_record = lambda c : SeqRecord(id = c.id, description = "", seq = c.sequence)
+            seqs = self.contigs
 
-        cdss = CDS.find({'genome' : self.id})
+        if pretty:
+            to_seq_record = lambda c : SeqRecord(id = c.pretty_id, description = "", seq = c.protein if prots else c.sequence )
+        else :
+            to_seq_record = lambda c : SeqRecord(id = str(c.id), description = "", seq = c.protein if prots else c.sequence)
+
+        recs = [to_seq_record(c) for c in seqs]
         with open(file, "w") as handle:
-            SeqIO.write(contigs, handle, "fasta")
+            SeqIO.write(recs, handle, "fasta")
 
     @staticmethod
     def clean(g):
         for gg in Genomic.find({'_pretty_id' : {'$regex' : '{gen}.*'.format(gen = g.name)}}):
             Genomic.delete(gg)
         Genome.delete(g)
+
+    def completness(self, marker_cogs):
+        cogs = [COG.find_one(ObjectId(c)) for c in marker_cogs]
+        sc_cogs = [c for c in cogs if len(c.genomes) == len(c._feature_list)]
+        hits = [self.id in c.genomes for c in sc_cogs]
+        return sum(hits)/len(sc_cogs)

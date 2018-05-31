@@ -15,14 +15,15 @@ class Prokka( Tool, Slurm ):
 
     name = "Prokka"
     executable = "prokka"
-
+    version_cmd = executable + " -v"
+    
     def run(self, genome, out_dir = "/tmp/") :
         exe_str = "prokka --outdir {out_dir}  --force --prefix {prefix} --locustag {tag} --cpus {threads} {infile} "
         prefix = genome.name
         tag = prefix
         threads = THREADS
         infile =  genome.name + ".fasta"
-        genome.to_fasta(infile)
+        genome.write_fasta(infile, pretty = True)
         return {'command' : exe_str.format(out_dir = out_dir, prefix = prefix, tag = tag, threads = threads, infile = infile), 'files' : [infile]}
 
     def run_remote(self, genome):

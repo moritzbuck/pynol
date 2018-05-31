@@ -1,10 +1,10 @@
 from mongo_thingy import Thingy
+from pynol.common.sequence.Feature import Feature
+from bson.objectid import ObjectId
 
 class COG( Thingy ):
     """docstring for COG."""
 
-    def __init__(self):
-        self._feature_list = []
 
     @property
     def feature_list(self):
@@ -22,6 +22,6 @@ class COG( Thingy ):
         obj = cls()
         assert all([f.id != None for f in feature_list]), "not all Feats are saved in the db"
         obj.feature_list = feature_list
-        obj.name
         obj.save()
+        obj.name = name
         return obj
