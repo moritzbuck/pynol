@@ -33,6 +33,17 @@ class COGing( Thingy ):
         return obj
 
     @classmethod
+    def FromDict(cls, name, dictionary):
+        obj = cls()
+        cogs = [COG.FromList(k,v) for k,v in tqdm(dictionary.items())]
+        obj.cogs = cogs
+        obj.name
+        obj.save()
+        return obj
+
+
+
+    @classmethod
     def silix_loader(cls, file):
         with open(file) as handle:
             pairs = [(l.split()[0], l.strip().split()[1]) for l in handle ]

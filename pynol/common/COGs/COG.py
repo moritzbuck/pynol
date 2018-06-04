@@ -22,6 +22,6 @@ class COG( Thingy ):
         obj = cls()
         assert all([f.id != None for f in feature_list]), "not all Feats are saved in the db"
         obj.feature_list = feature_list
-        obj.save()
         obj.name = name
+        obj.save()
         return obj

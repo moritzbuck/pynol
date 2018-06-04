@@ -6,6 +6,9 @@ import re
 
 class Sequence( Thingy ):
 
+    def __len__(self):
+        return len(self._sequence)
+
     @property
     def sequence(self):
         return Seq(self._sequence)

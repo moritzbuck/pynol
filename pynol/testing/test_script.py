@@ -65,6 +65,11 @@ with open("test_data/genome_taxonomy.csv","w") as handle :
         handle.writelines([",taxon\n"])
         handle.writelines(["{id},{tax}\n".format(id = g.id,  tax = g.taxonomy['gtdb']) for g in all_pates])
 
+tt = [COG.find_one(ObjectId(c)) for c in all_cores]
+tt = [c for c in tt if len(c._feature_list) < ((1+0.05)*len(c.genomes)) and len(c._feature_list) > ((1-0.05)*len(c.genomes))]
+tt = [t.id for t in tt]
+
+
 
 #for taxa, genomes  in all_pate.items():
 #    if len(genomes) > 50:

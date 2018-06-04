@@ -19,6 +19,10 @@ from Bio import SeqIO
 class Genome( Thingy ):
 
 # Attributes: Instance
+
+    def __len__(self):
+        return self.length
+
     def populate(self):
         self.source.get_data(self)
 
@@ -31,8 +35,8 @@ class Genome( Thingy ):
         genome.taxonomy['gtdb'] = gtdb_taxon_string
         genome.other_ids = {}
         genome.other_ids['uba_id'] = UBA_id
-        genome.populate()
         genome.save()
+        genome.populate()
         return genome
 
     @classmethod
@@ -42,8 +46,8 @@ class Genome( Thingy ):
         genome.source = FromRefSeq.FromRefSeq(s[0])
         genome.taxonomy['ncbi'] = ncbi_taxon_str
         genome.taxonomy['gtdb'] = gtdb_taxon_string
-        genome.populate()
         genome.save()
+        genome.populate()
         return genome
 
     @classmethod
@@ -55,8 +59,9 @@ class Genome( Thingy ):
         genome.other_ids = {}
         assert type(whatever_id) == dict, "whatever_id needs to be a dictionary with id type as key and ids as value"
         genome.other_ids = whatever_id
-        genome.populate()
         genome.save()
+        print("Created Genome with {id}".format(id = genome.id))
+        genome.populate()
         return genome
 
     @property
@@ -77,7 +82,7 @@ class Genome( Thingy ):
 
     @property
     def length(self):
-        return sum([len(l._sequence) for l in self.contigs])
+        return sum([len(l) for l in self.contigs])
 
 
     @property
