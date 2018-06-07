@@ -13,10 +13,42 @@ from pynol.common.COGs.COG import COG
 from pynol.common.COGs.COGing import COGing
 from mongo_thingy import connect, Thingy
 from bson.objectid import ObjectId
+from Bio.SeqRecord import SeqRecord
+from collections import defaultdict
+
 connect("mongodb://localhost/acI")
 
 cogs = COGing.find_one()
 genomes = list(Genome.find())
+
+def make_line(feature, offset, thresh = 10**-3):
+    name = feature.pretty_id.split(":")[0]+"_"+feature.pretty_id.split(":")[-1]
+    if offset > 0:
+        start = feature.start-offset
+        end = feature.end-offset
+        strand = feature.strand
+    else :
+        end = start
+    if feature.pfams:
+        pfams = ";".join([p.get('query_accession').split(".")[0] for p in feature.pfams if p.get('i-Evalue') < thresh])
+    else :
+        pfams = ""
+    cog = COG.find_one({'_feature_list' : feature.id})
+    data = [name, str(start),str(end),str(strand), pfams, cog.name if cog else "", cog.group if cog and cog.group else "", feature.type]
+    return ",".join(data)
+
+
+home = os.environ['HOME']
+wei_path = pjoin(home, "people/S001_acI_horizontals/")
+data_root = pjoin(wei_path,"000_data/")
+temp_root = pjoin(wei_path,"100_temp/")
+temp_hmm = pjoin(temp_root,"110_pfams/")
+genome_path = pjoin(data_root, "acI_genomes_annotation/")
+compliant_path = pjoin(data_root,"compliantFasta/")
+group_folder = pjoin(data_root, "cluster_groups")
+cluster_file = pjoin(data_root, "groups_with_singletons.txt")
+genome_files = [f for f in os.listdir(genome_path) if "gbff" in f]
+gi_path = pjoin(wei_path, "200_GI_data")
 
 gi1_island = {g.name : [] for g in genomes}
 for c in cogs:
@@ -30,18 +62,49 @@ for k, v in gi1_island.items():
     gi1_island[k] = feats
 
 tt = {k : sum([ [vv.start,vv.end] for vv in v],[])  for k,v in gi1_island.items()}
-gi1_ranges = {k : (min(v), max(v))  for k,v in tt.items() if len(v) > 0}
+flanks = 40000
+genome_ranges = {
+                'CP68' : (1138108,1238108),
+                'CP79' : (0,100000),
+                'IMC1' : (0000,2100000)
+                }
 
-flanks = 10000
+gi1_ranges = {k : (min(v)-flanks, max(v)+flanks) if len(v) > 0 else genome_ranges[k]  for k,v in tt.items() }
+
 gi1_features = {}
+range_seq_records = []
 for k, v in gi1_ranges.items():
     print("Getting all feature in the ranges of GI1 of {genom} within +- {kb}kb".format(genom = k, kb = flanks))
     genome = Genome.find_one({ '_name' : k})
     vv = list(v)
-    vv[0] = v[0]-flanks
-    vv[1] = v[1]+flanks
-    gi1_features = Feature.search(genome, v)
+    vv[0] = v[0]#-flanks
+    vv[1] = v[1]#+flanks
+    gi1_features[k] = Feature.search(genome, vv)
 
+
+for k, v in gi1_features.items():
+    gi1_features[k] = sorted(gi1_features[k],key = lambda bla : bla.start)
+
+maxs ={k : max([ff.start for ff in f]) for k,f in gi1_features.items()}
+mins ={k : min([ff.start for ff in f]) for k,f in gi1_features.items()}
+
+for k in gi1_ranges.keys():
+    genome = Genome.find_one({ '_name' : k})
+    range_seq_records += [SeqRecord(seq = genome.contigs[0].sequence[mins[k]:maxs[k]], id = "GI1_" + genome.name, description= "")]
+
+seq_file = pjoin(temp_root, "120_all_v_all", "GI1_ranges_{kb}kb.fasta".format(kb = flanks/1000))
+with open(seq_file, "w") as handle:
+    SeqIO.write(range_seq_records,handle,"fasta")
+
+print("blasting")
+os.system("makeblastdb -dbtype nucl -out {file} -in {file}".format(file = seq_file))
+os.system("tblastx -db {file} -query {file} -outfmt 6 -evalue 0.001 > GI1_v_GI1.tblastx".format(file = seq_file))
+
+for k,v in gi1_features.items():
+    file_path = pjoin(gi_path, "210_GI1", k + "_GI1.csv")
+    with open(file_path,"w") as handle:
+        handle.writelines(["name,start,end,strand,pfams,cog,group,type\n"])
+        handle.writelines([make_line(vv, mins[k] ) + "\n" for vv in v])
 
 
 def parse_pfam_file(file):
@@ -68,16 +131,6 @@ def load_genomes_to_db():
     }
     trans_name = lambda name : "CP" + name.split(".")[0][-2:] if "CP" in name else im_dict[name.split(".")[0]]
     get_ncbi = lambda name : "NZ_" + name.split(".")[0] if "CP" in name else im_ncbi[name.split(".")[0]]
-    home = os.environ['HOME']
-    wei_path = pjoin(home, "people/S001_acI_horizontals/")
-    data_root = pjoin(wei_path,"000_data/")
-    temp_root = pjoin(wei_path,"100_temp/")
-    temp_hmm = pjoin(temp_root,"110_pfams/")
-    genome_path = pjoin(data_root, "acI_genomes_annotation/")
-    compliant_path = pjoin(data_root,"compliantFasta/")
-    group_folder = pjoin(data_root, "cluster_groups")
-    cluster_file = pjoin(data_root, "groups_with_singletons.txt")
-    genome_files = [f for f in os.listdir(genome_path) if "gbff" in f]
 
 
 ## Load genomes
@@ -121,7 +174,7 @@ def load_genomes_to_db():
 
         g.write_fasta(prot_file)
         exe_string = "hmmsearch --cpu {cpus} --domtblout {out} {db} {seqs} > /dev/null".format(cpus = 3, out = hmm_file, db = pfam_db, seqs = prot_file)
-#        os.system(exe_string)
+        os.system(exe_string)
 
         output = parse_pfam_file(hmm_file)
 
@@ -129,3 +182,9 @@ def load_genomes_to_db():
             cds_obj = CDS.find_one(cds)
             cds_obj.pfams = hits
             cds_obj.save()
+
+## all_v_all blast
+
+    for g in tqdm(Genome.find()):
+        prot_file = pjoin(temp_hmm, g.name + ".fna")
+        g.write_fasta(prot_file, pretty = True)

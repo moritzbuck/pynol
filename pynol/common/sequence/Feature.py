@@ -47,9 +47,10 @@ class Feature( Nucleotide ):
         obj = cls()
         loc = feature.location.replace('<','').replace('>','')
         rev_comp = "complement" in loc
+        obj.strand = 1
         if rev_comp:
             loc = loc.replace("complement(",'').replace(')','')
-
+            obj.strand = -1
         qualis =  { q.key[1:-1] : q.value.replace('"','') for q in feature.qualifiers}
         genomic = Genomic.find_one({'other_ids.original' : gbk.version})
         assert genomic, "the contigs for these features does not exists"
