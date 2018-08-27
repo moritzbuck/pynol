@@ -43,7 +43,8 @@ class Genome( Thingy ):
     def FromRefSeq(cls, refseq_id, gtdb_taxon_string, ncbi_taxon_str = None):
         genome = cls()
         genome.name = refseq_id
-        genome.source = FromRefSeq.FromRefSeq(s[0])
+        genome.source = FromRefSeq.FromRefSeq(refseq_id )
+        genome.taxonomy = {}
         genome.taxonomy['ncbi'] = ncbi_taxon_str
         genome.taxonomy['gtdb'] = gtdb_taxon_string
         genome.save()

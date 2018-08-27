@@ -4,7 +4,8 @@ from os.path import join as pjoin
 wk_path = pjoin("/tmp/",str(uuid.uuid4()))
 os.makedirs(wk_path)
 
-genomes = tt
+genomes = list(Genome.find())
+
 for g in tqdm(genomes) :
     g.write_fasta(pjoin(wk_path, str(g.id) + ".faa"))
 

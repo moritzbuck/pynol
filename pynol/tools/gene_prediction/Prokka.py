@@ -9,14 +9,15 @@ import os
 from pynol.common.sequence.Feature import Feature
 from pynol.common.sequence.RNA import RNA
 from pynol.common.sequence.CDS import CDS
-
+from pynol.common.sequence.Genomic import Genomic
+from tqdm import tqdm
 
 class Prokka( Tool, Slurm ):
 
     name = "Prokka"
     executable = "prokka"
     version_cmd = executable + " -v"
-    
+
     def run(self, genome, out_dir = "/tmp/") :
         exe_str = "prokka --outdir {out_dir}  --force --prefix {prefix} --locustag {tag} --cpus {threads} {infile} "
         prefix = genome.name
@@ -47,18 +48,17 @@ mv {path} {dones}
             lines = [l.strip().split("\t") for l in handle if l[0] != "#" and "\t" in l
             ]
 
+
         all_feats = {'CDS' : {}, 'RNA' : {}, 'other' : {}}
 
-        for l in lines :
-            if l[2] == "CDS" :
-                feat = CDS.fromGFFline(l)
-                all_feats['CDS'][feat.pretty_id] = feat.id
-            elif "RNA" in l[2] :
-                feat = RNA.fromGFFline(l)
-                all_feats['RNA'][feat.pretty_id] = feat.id
-            else :
-                print("Feature of type ", l[2], " with no specific class")
-                feat = Feature.fromGFFline(l)
-                all_feats['other'][feat.pretty_id] = feat.id
 
-        return all_feats
+        for l in tqdm(lines) :
+            prev = False#Feature.search(genomic=Genomic.find_one({'_pretty_id' : l[0]}), interval=(int(l[3]), int(l[4])))
+            if not prev:
+                if l[2] == "CDS" :
+                    CDS.fromGFFline(l)
+                elif "RNA" in l[2] :
+                    RNA.fromGFFline(l)
+                else :
+                    print("Feature of type ", l[2], " with no specific class")
+                    Feature.fromGFFline(l)

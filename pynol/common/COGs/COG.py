@@ -13,6 +13,11 @@ class COG( Thingy ):
             feats += list(cls.find({'_id' : {'$in' : self._feature_list}}))
         return feats
 
+    @property
+    def genomes(self):
+        return set([f.genome for f in self.feature_list])
+
+
     @feature_list.setter
     def feature_list(self, features):
         self._feature_list = [f.id for f in features]

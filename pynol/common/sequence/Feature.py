@@ -3,25 +3,32 @@ from pynol.common.sequence.Genomic import Genomic
 from Bio.Alphabet import DNAAlphabet
 from Bio.GenBank import parse
 from bson.objectid import ObjectId
+import pynol
 
 class Feature( Nucleotide ):
     @classmethod
-    def search(cls, genome, interval = None):
-        if type(genome) == ObjectId :
-            genome_query = { 'genome' : genome }
+    def search(cls, genomic, interval = None):
+        if type(genomic) == pynol.common.genome.Genome.Genome :
+            feats = {}
+            for contig in Genomic.find({'genome' : genomic._id}):
+                feats[contig] = Feature.search(contig, interval = interval)
+            return feats
         else :
-            genome_query = {'genome' : genome.id}
-        if interval :
-            start_query = { 'start' : {'$gte' : interval[0] } }
-            end_query = { 'end' : {'$lte' : interval[1] } }
-            query = { '$and' : [ genome_query , start_query, end_query]}
-        else :
-            query = genome_query
+            if type(genomic) == ObjectId :
+                genomic_query = { 'genomic' : genomic }
+            else :
+                genomic_query = {'genomic' : genomic.id}
+            if interval :
+                start_query = { 'start' : {'$gte' : interval[0] } }
+                end_query = { 'end' : {'$lte' : interval[1] } }
+                query = { '$and' : [ genomic_query , start_query, end_query]}
+            else :
+                query = genomic_query
 
-        feats = list(cls.find(query))
-        for sub_cls in cls.__subclasses__():
-            feats += list(sub_cls.find(query))
-        return feats
+            feats = list(cls.find(query))
+            for sub_cls in cls.__subclasses__():
+                feats += list(sub_cls.find(query))
+            return feats
 
     @classmethod
     def parse_gff(cls, file):
@@ -63,7 +70,7 @@ class Feature( Nucleotide ):
         obj.type = feature.key
         obj.start = start
         obj.end = end
-        obj.pretty_id = genomic.pretty_id+":" + obj.type + ":" + (extras['locus_tag'].split("_")[-1] if extras.get('locus_tag') else ":".join([ k + "_" + v for k,v in extras.items()]).replace(" ", "_").replace("-","_").replace(")","_").replace("(",""))
+        obj.pretty_id = genomic.pretty_id+":" + obj.type + ":" + (extras['ID'].split("_")[-1] if extras.get('ID') else str(start) + "to" + str(end))
         obj.sequence = seq.reverse_complement() if rev_comp else seq
         obj.genomic = genomic.id
         obj.genome = genomic.genome
@@ -85,7 +92,7 @@ class Feature( Nucleotide ):
         obj.type = line[2]
         obj.start = start
         obj.end = end
-        obj.pretty_id = genomic.pretty_id+":" + obj.type + ":" + (extras['ID'].split("_")[-1] if extras.get('ID') else line[-1].strip().replace("=","_").replace(" ","_"))
+        obj.pretty_id = genomic.pretty_id+":" + obj.type + ":" + (extras['ID'].split("_")[-1] if extras.get('ID') else str(start) + "to" + str(end))
         obj.sequence = seq.reverse_complement() if rev_comp else seq
         obj.genomic = genomic.id
         obj.genome = genomic.genome

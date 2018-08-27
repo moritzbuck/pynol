@@ -26,9 +26,9 @@ class COGing( Thingy ):
     @classmethod
     def FromFile(cls, name, file_name, method):
         obj = cls()
-        if method == "duck":
-            obj.cogs = cls.duck_silix_loader(file_name)
-        obj.name
+        if method == "silix":
+            obj.cogs = cls.silix_loader(file_name)
+        obj.name = name
         obj.save()
         return obj
 
@@ -48,8 +48,16 @@ class COGing( Thingy ):
         with open(file) as handle:
             pairs = [(l.split()[0], l.strip().split()[1]) for l in handle ]
         cogs = {p[0] : [] for p in pairs}
-        for k,v in pairs:
-            cogs[k] += [v]
+        for k,v in tqdm(pairs):
+            cogs[k] += [ v ]
+
+        cogs_out = []
+        for k,v in tqdm(cogs.items()):
+            founds = CDS.find({'_id' : {'$in' : [ObjectId(vv) for vv in v]}})
+            cc =  COG.FromList(k,list(founds))
+            cogs_out += [cc]
+        return cogs_out
+
 
     @classmethod
     def duck_silix_loader(cls, file):

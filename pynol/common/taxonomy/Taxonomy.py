@@ -23,7 +23,9 @@ class Taxonomy():
 
     def from_gtdb_taxonomy_file(self, file):
         with open(file) as handle:
-            all_strings = {l.strip().split("\t")[1] for l in handle}
+            all_data  = {l.strip().split("\t")[0] : l.strip().split("\t")[1] for l in handle}
+
+        all_strings = set(all_data.values())
 
         for s in tqdm(all_strings):
             parent = self.root
@@ -36,6 +38,8 @@ class Taxonomy():
                     else :
                         self.taxa_dict[key] = Taxon(f[0], f[1], parent)
                         parent = self.taxa_dict[key]
+        self.gtdb = { k : self[v] for k,v in all_data.items()}
+
 
     def check_consistency(self , tax_string):
         parent = self.root

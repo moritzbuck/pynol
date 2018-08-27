@@ -15,14 +15,21 @@ from mongo_thingy import connect, Thingy
 from bson.objectid import ObjectId
 from Bio.SeqRecord import SeqRecord
 from collections import defaultdict
+import re
+from scipy.stats import hypergeom
+from pandas import DataFrame
+import statsmodels.stats.multitest as multi
 
 connect("mongodb://localhost/acI")
 
 cogs = COGing.find_one()
 genomes = list(Genome.find())
+with open("/home/moritzbuck/data/pfamA.txt") as handle:
+    pfam2name={re.split(r'\t',l)[0] : re.split(r'\t',l)[3] for l in handle.readlines()}
 
 def make_line(feature, offset, thresh = 10**-3):
     name = feature.pretty_id.split(":")[0]+"_"+feature.pretty_id.split(":")[-1]
+    product = feature.more.get('product')
     if offset > 0:
         start = feature.start-offset
         end = feature.end-offset
@@ -31,11 +38,13 @@ def make_line(feature, offset, thresh = 10**-3):
         end = start
     if feature.pfams:
         pfams = ";".join([p.get('query_accession').split(".")[0] for p in feature.pfams if p.get('i-Evalue') < thresh])
+        pfam_names = ";".join([pfam2name[p.get('query_accession').split(".")[0]] for p in feature.pfams if p.get('i-Evalue') < thresh])
     else :
         pfams = ""
+        pfam_names = ""
     cog = COG.find_one({'_feature_list' : feature.id})
-    data = [name, str(start),str(end),str(strand), pfams, cog.name if cog else "", cog.group if cog and cog.group else "", feature.type]
-    return ",".join(data)
+    data = [name, product, str(start),str(end),str(strand), pfams, pfam_names , cog.name if cog else "", ";".join(cog.group) if cog and cog.group else "", feature.type]
+    return "\t".join(data)
 
 
 home = os.environ['HOME']
@@ -53,8 +62,9 @@ gi_path = pjoin(wei_path, "200_GI_data")
 gi1_island = {g.name : [] for g in genomes}
 for c in cogs:
     if c.group:
-        if "GI1" in c.group:
-            gi1_island[c.group.split(".")[0]] += [c]
+        grps = [g for g in c.group if "GI1" in g]
+        for g in grps:
+            gi1_island[g.split(".")[0]] += [c]
 
 for k, v in gi1_island.items():
     feats = sum([vv.feature_list for vv in v ],[])
@@ -62,14 +72,15 @@ for k, v in gi1_island.items():
     gi1_island[k] = feats
 
 tt = {k : sum([ [vv.start,vv.end] for vv in v],[])  for k,v in gi1_island.items()}
-flanks = 40000
+flanks = 20000
 genome_ranges = {
-                'CP68' : (1138108,1238108),
-                'CP79' : (0,100000),
-                'IMC1' : (0000,2100000)
+                'CP68' : (1160000,1240000),
+                'CP82': (1230030, 1302615),
+                'CP79' : (0,50000),
+                'IMC1' : (100000,140000)
                 }
 
-gi1_ranges = {k : (min(v)-flanks, max(v)+flanks) if len(v) > 0 else genome_ranges[k]  for k,v in tt.items() }
+gi1_ranges = {k : genome_ranges[k] if genome_ranges.get(k) else (min(v)-flanks, max(v)+flanks)  for k,v in tt.items() if len(v) > 0 or genome_ranges.get(k)}
 
 gi1_features = {}
 range_seq_records = []
@@ -79,8 +90,9 @@ for k, v in gi1_ranges.items():
     vv = list(v)
     vv[0] = v[0]#-flanks
     vv[1] = v[1]#+flanks
-    gi1_features[k] = Feature.search(genome, vv)
-
+    feats =  Feature.search(genome, vv)
+    assert len(feats.values()) == 1
+    gi1_features[k] = list(feats.values())[0]
 
 for k, v in gi1_features.items():
     gi1_features[k] = sorted(gi1_features[k],key = lambda bla : bla.start)
@@ -96,6 +108,43 @@ seq_file = pjoin(temp_root, "120_all_v_all", "GI1_ranges_{kb}kb.fasta".format(kb
 with open(seq_file, "w") as handle:
     SeqIO.write(range_seq_records,handle,"fasta")
 
+
+full_pfams = {}
+for g in gi1_ranges:
+    genome = Genome.find_one({ '_name' : k})
+    full_pfams[g] = sum([[f['query_accession'] for f in f.pfams if f['E-value'] < 0.001 ]  for f in list(Feature.search(genome).values())[0] if f.pfams],[])
+
+genome2pfams = full_pfams
+pfam2genome = {f : [k for k,v in genome2pfams.items() if f in v] for f in full_pfams }
+
+full_pfams = sum(full_pfams.values(),[])
+all_pfams = set(full_pfams)
+gi1_pfams = sum([[f['query_accession'] for f in f.pfams if f['E-value'] < 0.001 ] for f in sum(gi1_features.values(),[]) if f.pfams],[])
+
+def pfam_hyg(pfam):
+        k = gi1_pfams.count(pfam)
+        M = len(full_pfams)
+        N = len(gi1_pfams)
+        n = full_pfams.count(pfam)
+        p = hypergeom.sf(k = k, M = M, n = n, N = N)
+        ratio = (float(k)/N)/(float(n)/M)
+        return p,ratio
+
+pfams_pvals = {p : pfam_hyg(p)[0] for p in all_pfams}
+pfams_effect = {p : pfam_hyg(p)[1] for p in all_pfams}
+
+adj_pval = dict(zip(all_pfams,multi.multipletests(list(pfams_pvals.values()), method="fdr_bh")[1]))
+sigs = { k.split(".")[0] : { 'name' : pfam2name[k.split(".")[0]], 'pval' : pfams_pvals[k] , 'adj.pval' : v, 'ratio' :pfams_effect[k]} for k,v in sorted(adj_pval.items(), key = lambda x : x[1]) if v < 0.05}
+pfam_table = DataFrame.from_dict(sigs, orient = 'index')
+pfam_table = pfam_table.sort_values(by = 'adj.pval')
+pfam_table['group'] = ["other transferase" if "ransferase" in p else "" for p in pfam_table.name]
+pfam_table['group'] = ["methyltransferase" if "Methyl" in p and "transferase" in p else g for p,g in zip(pfam_table.name, pfam_table.group)]
+pfam_table['group'] = ["glycosyl transferase" if "Glycosyl" in p and "transferase" in p else g for p,g in zip(pfam_table.name, pfam_table.group)]
+pfam_table['group'] = ["replication" if  "DNA" in p or  "elicase"  in p or "opoisomerase" in p else g for p,g in zip(pfam_table.name, pfam_table.group)]
+pfam_table.to_csv("/home/moritzbuck/people/S001_acI_horizontals/pfam_table.csv")
+
+
+
 print("blasting")
 os.system("makeblastdb -dbtype nucl -out {file} -in {file}".format(file = seq_file))
 os.system("tblastx -db {file} -query {file} -outfmt 6 -evalue 0.001 > GI1_v_GI1.tblastx".format(file = seq_file))
@@ -103,7 +152,7 @@ os.system("tblastx -db {file} -query {file} -outfmt 6 -evalue 0.001 > GI1_v_GI1.
 for k,v in gi1_features.items():
     file_path = pjoin(gi_path, "210_GI1", k + "_GI1.csv")
     with open(file_path,"w") as handle:
-        handle.writelines(["name,start,end,strand,pfams,cog,group,type\n"])
+        handle.writelines(["name\tproduct\tstart\tend\tstrand\tpfams\tpfamNames\tcog\tgroup\ttype\n"])
         handle.writelines([make_line(vv, mins[k] ) + "\n" for vv in v])
 
 
@@ -163,7 +212,11 @@ def load_genomes_to_db():
     for k, v in COG_groups.items():
         for vv in v:
             cog = COG.find_one(vv)
-            cog.group = k
+            if type(cog.group) == str:
+                del cog.group
+            if not cog.group:
+                cog.group = []
+            cog.group += [k]
             cog.save()
 ## run hmms runs
 
