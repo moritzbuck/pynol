@@ -23,8 +23,6 @@ class Slurm(object):
 #SBATCH -t {time}
 #SBATCH -n {threads}
 #SBATCH -p core
-#SBATCH --mail-user {email}
-#SBATCH --mail-type=ALL
 
 {commands}
 """
@@ -36,7 +34,6 @@ class Slurm(object):
             project = project,
             time = time,
             threads = threads,
-            email = email,
             commands = command)
 
         with open(pjoin('/tmp/', job_name + ".sh"), "w") as  handle:

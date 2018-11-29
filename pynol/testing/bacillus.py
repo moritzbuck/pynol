@@ -31,7 +31,7 @@ def load_data():
 
 connect("mongodb://localhost/bacillus")
 taxonomy = Taxonomy()
-taxonomy.from_gtdb_taxonomy_file("/home/moritzbuck/data/bac_taxonomy_r80.tsv")
+taxonomy.from_gtdb_taxonomy_file("/home/moritzbuck/data/bac_taxonomy_r86.tsv")
 
 bacili_tax = {k : v for k,v in taxonomy.gtdb.items() if v.is_child(taxonomy["g__Bacillus"])}
 prok = Prokka.find_one()

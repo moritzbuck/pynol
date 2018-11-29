@@ -12,6 +12,7 @@ from pynol.common.sequence.CDS import CDS
 from pynol.common.sequence.Genomic import Genomic
 from tqdm import tqdm
 
+
 class Prokka( Tool, Slurm ):
 
     name = "Prokka"
@@ -24,24 +25,24 @@ class Prokka( Tool, Slurm ):
         tag = prefix
         threads = THREADS
         infile =  genome.name + ".fasta"
-        genome.write_fasta(infile, pretty = True)
+        genome.write_fasta(infile, pretty = False)
         return {'command' : exe_str.format(out_dir = out_dir, prefix = prefix, tag = tag, threads = threads, infile = infile), 'files' : [infile]}
 
-    def run_remote(self, genome):
-        stuff = self.run(genome, '/home/moritz/temp/' + genome.name)
+    def run_remote(self, genome, remote_temp_home = '/home/moritz/temp/'):
+        stuff = self.run(genome, pjoin(remote_temp_home, genome.name))
         stuff['command'] = """module load bioinfo-tools
 module load prokka
 mkdir {dones}
 mkdir {path}
 {command}
 mv {path} {dones}
-""".format(command = stuff['command'], path = '/home/moritz/temp/' + genome.name, dones = '/home/moritz/temp/prokkas/')
+""".format(command = stuff['command'], path = pjoin(remote_temp_home, genome.name), dones = pjoin(remote_temp_home , 'prokkas/'))
 
         Slurm.run_remote(self, job_name = "Prokka_" + genome.name, command = stuff['command'], files = stuff['files'], threads = 4)
 
-    def retrieve_data(self, genome):
+    def retrieve_data(self, genome, remote_temp_home = '/home/moritz/temp/'):
         gbk_file = pjoin('/tmp/', genome.name + ".gff")
-        Slurm.retrieve_data(self, files = [genome.name + ".gff"], folder = '/home/moritz/temp/prokkas/' + genome.name)
+        Slurm.retrieve_data(self, files = [genome.name + ".gff"], folder = pjoin(remote_temp_home , 'prokkas/' , genome.name) )
         if not os.path.exists(gbk_file):
             return "Not run or crashed"
         with open(gbk_file) as handle:

@@ -1,3 +1,5 @@
+from ete3 import Tree, NodeStyle, TreeStyle
+from ete3 import COLOR_SCHEMES
 import os
 from os.path import join as pjoin
 from pynol.common.sequence.Genomic import Genomic
@@ -19,13 +21,23 @@ import re
 from scipy.stats import hypergeom
 from pandas import DataFrame
 import statsmodels.stats.multitest as multi
+from Bio.SeqRecord import SeqRecord
+from pynol.tools.similarity_search.Blast import Blast
+from Bio import Entrez
+import re
 
 connect("mongodb://localhost/acI")
 
 cogs = COGing.find_one()
 genomes = list(Genome.find())
+
 with open("/home/moritzbuck/data/pfamA.txt") as handle:
     pfam2name={re.split(r'\t',l)[0] : re.split(r'\t',l)[3] for l in handle.readlines()}
+
+
+with open("/home/moritzbuck/data/pfamA.txt") as handle:
+    pfam2name={re.split(r'\t',l)[0] : re.split(r'\t',l)[3] for l in handle.readlines()}
+
 
 def make_line(feature, offset, thresh = 10**-3):
     name = feature.pretty_id.split(":")[0]+"_"+feature.pretty_id.split(":")[-1]
@@ -58,6 +70,89 @@ group_folder = pjoin(data_root, "cluster_groups")
 cluster_file = pjoin(data_root, "groups_with_singletons.txt")
 genome_files = [f for f in os.listdir(genome_path) if "gbff" in f]
 gi_path = pjoin(wei_path, "200_GI_data")
+ancestor_path = pjoin(gi_path, "220_ancestor_gains")
+
+[os.makedirs( pjoin(ancestor_path , c.name )) for c in cogs if c.group and "ancestor_gains" in c.group if not os.path.exists( pjoin(ancestor_path , c.name ))]
+[ SeqIO.write([ SeqRecord(id = c.name + ";" + Genome.find_one(cc.genome).name , seq =cc.protein, description = "") for cc in c.feature_list ], pjoin(ancestor_path , c.name , c.name + ".faa"), "fasta") for c in cogs if c.group and "ancestor_gains" in c.group]
+
+os.system("cat {path}/*/*.faa > {path}/all_gained.faa".format(path=ancestor_path))
+#os.system("blastp  -num_threads 20  -query all_gained.faa  -db /sw/data/uppnex/blast_databases/nr -outfmt 10  >  {path}/all_gained_vs_nr.blastp".format(path = ancestor_path))
+
+raw_all_blast = Blast.parse_blast_file("/home/moritzbuck/people/S001_acI_horizontals/200_GI_data/220_ancestor_gains/all_gained_vs_nr.blastp")
+raw_all_blast['cog'] = [c.split(";")[0] for c in raw_all_blast['query']]
+
+cutoffs = dict(raw_all_blast.groupby('cog').apply(lambda df : {ii: len(set(df.loc[df['evalue'] < 10**-ii].subject)) for ii in list(range(3,10))+[20,30,40,50] } ))
+min_seq = 250
+min_cutoff = lambda dd, v : min({ k : vv for k, vv in dd.items() if vv > min_seq }.items(), key=lambda x : x[1])
+cutoffs = {cog : (min_cutoff(v, min_seq) if max(v.values()) > min_seq else max(v.items(), key=lambda t : t[1]))[0] for cog, v in cutoffs.items()}
+hits = dict(raw_all_blast.groupby('cog').apply(lambda df : set(df.loc[df['evalue'] < 10**-cutoffs[list(df['cog'])[0]]].subject) ))
+
+from Bio import Entrez
+Entrez.email = "murumbii@gmail.com"
+
+homos = dict()
+for k, ids in tqdm(hits.items()):
+    if not homos.get(k):
+        with Entrez.efetch(db="protein", rettype="gp", retmode="text", id=list(ids)) as handle:
+            homos[k] = [s for s in SeqIO.parse(handle, "genbank")]
+
+with Entrez.efetch(db="protein", rettype="gp", retmode="text", id=bla) as handle:
+    hh = [s for s in tqdm(SeqIO.parse(handle, "genbank"))]
+
+
+
+[ SeqIO.write([ SeqRecord(id = c.name + ";" + Genome.find_one(cc.genome).name , seq =cc.protein, description = "") for cc in c.feature_list ] + hits[c], pjoin(ancestor_path , c.name , c.name + "_with_hits.faa"), "fasta") for c in cogs if c.group and "ancestor_gains" in c.group]
+
+slurm_script = """#!/bin/bash
+#SBATCH -D /home/moritz/temp/trees/
+#SBATCH -J trees_{name}
+#SBATCH -o /home/moritz/temp/trees/{name}.out
+#SBATCH -e /home/moritz/temp/trees/{name}.err
+#SBATCH -A snic2017-1-616
+#SBATCH -t 10-00:00:00
+#SBATCH -n 1
+#SBATCH -p core
+
+mkdir {name}
+cd {name}
+mv ../../{name}_with_hits.faa .
+muscle -in {name}_with_hits.faa -out {name}_aligned.faa
+fasttree < {name}_aligned.faa > {name}.tree
+"""
+
+raxml_slurm_script = """#!/bin/bash
+#SBATCH -D /home/moritz/temp/more_trees/
+#SBATCH -J trees_{name}
+#SBATCH -o /home/moritz/temp/more_trees/rax_{name}.out
+#SBATCH -e /home/moritz/temp/more_trees/rax_{name}.err
+#SBATCH -A snic2017-1-616
+#SBATCH -t 2-00:00:00
+#SBATCH -n 4
+#SBATCH -p core
+
+module load bioinfo-tools
+module load raxml
+
+mkdir -p {name}
+cd {name}
+mv ../fastas/rax_{name}.faa .
+muscle -in rax_{name}.faa -out {name}_aligned.faa
+raxmlHPC-PTHREADS-AVX -m PROTGAMMALGF -T 4 -p 42 -s {name}_aligned.faa -n tree -n {name} -f a -x 1 -N autoMR
+"""
+
+
+for c in cogs:
+    if c.group and "ancestor_gains" in c.group:
+        scr = slurm_script.format(name = c.name)
+        with open(pjoin(temp_root, c.name + ".sh"), "w") as handle:
+            handle.writelines(scr)
+
+for c in cogs:
+    if c.group and "ancestor_gains" in c.group:
+        prin("making tree for ", c.name)
+        make_tree_fig(pjoin(ancestor_path, c.name, c.name + ".tree"), pjoin(temp_root, c.name, c.name + ".tree"))
+
+
 
 gi1_island = {g.name : [] for g in genomes}
 for c in cogs:
@@ -155,6 +250,21 @@ for k,v in gi1_features.items():
         handle.writelines(["name\tproduct\tstart\tend\tstrand\tpfams\tpfamNames\tcog\tgroup\ttype\n"])
         handle.writelines([make_line(vv, mins[k] ) + "\n" for vv in v])
 
+all_gi_cdss = [gg.id for g in gi1_features.values() for gg in g]
+
+links = {cds : sum([ [CDS.find_one(f) for f in COG.find_one(c)._feature_list  if f in all_gi_cdss ]  for c in cds.cogs ],[]) for island in gi1_features.values() for cds in island if cds.cogs}
+
+gi1_mins = { k : min([f.start for f in fs])for k, fs in  gi1_features.items()}
+def line_maker(cds):
+    nome = Genome.find_one(cds.genome).name
+    offset = gi1_mins[nome]
+    group = ":".join(sum([COG.find_one(cog).group for cog in cds.cogs if COG.find_one(cog).group],[]))
+    return "\t".join([Genome.find_one(cds.genome).name, str(cds.start-offset), str(cds.end-offset), group])
+
+with open("/home/moritzbuck/people/S001_acI_horizontals/gi1_links.txt", "w") as handle:
+     handle.writelines([line_maker(k) + "\t" + line_maker(ll) + "\n" for k, l in links.items() for ll in l])
+
+
 
 def parse_pfam_file(file):
     domtblout_head = ["target_name" , "target_accession" , "tlen" , "query_name" , "query_accession" , "qlen" , "E-value","score-sequence" , "bias-sequence" , "nb" , "of" , "c-Evalue" , "i-Evalue" , "score-domain" , "bias-domain" , "hmm_from" , "hmm_to" , "ali_from" , "ali_to" , "env_from" , "env_to" , "acc" , "description_of_target"]
@@ -241,3 +351,91 @@ def load_genomes_to_db():
     for g in tqdm(Genome.find()):
         prot_file = pjoin(temp_hmm, g.name + ".fna")
         g.write_fasta(prot_file, pretty = True)
+
+
+    def make_tree_fig(tree_file, out_name, tax_level = None ):
+        with open(tree_file) as handle:
+            lines = handle.readlines()
+
+            if len(lines) > 0 :
+                ete_tree = Tree(lines[0][:-1].replace(";IM","-IM").replace(";CP","-"))
+            else :
+                return None
+        if tax_level:
+            taxa = {}
+#            taxa = {xx : [x for x in xx.name.replace(" ","-").split("_")[1:] if len(x) > 0 and not x[0].isdigit() ] for xx in ete_tree.get_leaves()}
+            for xx in ete_tree.get_leaves():
+                id = xx.name
+                taxon = taxas.get(id)
+                if taxon :
+                    xx.name = ";".join([ id ] + taxon if taxon else [])
+                taxa[xx] = taxon[tax_level] if taxon and len(taxon) > tax_level else None
+
+
+            for leaf in taxa:
+                leaf.set_style(NodeStyle())
+                if taxa.get(leaf) and cols.get(taxa[leaf]):
+                    leaf.img_style["bgcolor"] = cols[taxa[leaf]]
+                elif "acI" in leaf.name:
+                        leaf.img_style["bgcolor"] = cols['acI']
+        else :
+            taxa = None
+        styl = TreeStyle()
+        styl.mode = 'c'
+#        styl.arc_start = -180
+#        styl.arc_span = 180 #
+        print(out_name)
+        ete_tree.render(out_name,w=len(ete_tree.get_leaves())*5, tree_style= styl)
+
+
+
+
+cp69tocp77 = {k : [vv for vv in v if "CP77" in vv.pretty_id] for k, v in links.items() if "CP69" in k.pretty_id}
+ll = list({ COG.find_one(k.cogs[0]).name : COG.find_one(k.cogs[0]).name for k,v in cp69tocp77.items() if len(v) > 0 }.keys())
+
+
+[os.makedirs( pjoin(temp_root, "130_other" , c.name )) for c in cogs if c.name in ll and not os.path.exists( pjoin(temp_root, "130_other" , c.name ))]
+[ SeqIO.write([ SeqRecord(id = str(i).zfill(2) + "_" + c.name + "_" + Genome.find_one(cc.genome).name , seq =cc.protein, description = "") for i, cc in enumerate(c.feature_list) ], pjoin(temp_root, "130_other" , c.name , "rax_" +  c.name + ".faa"), "fasta") for c in cogs if c.name in ll]
+
+os.system("cat {path}/*/*.faa > {path}/all_gained.faa".format(path=pjoin(temp_root, "130_other")))
+#os.system("blastp  -num_threads 20  -query all_gained.faa  -db /sw/data/uppnex/blast_databases/nr -outfmt 10  >  {path}/all_gained_vs_nr.blastp".format(path = ancestor_path))
+
+raw_all_blast = Blast.parse_blast_file("/home/moritzbuck/uppmax/temp/all_gained_vs_nr.blastp")
+raw_all_blast['cog'] = [c.split(";")[0] for c in raw_all_blast['query']]
+
+cutoffs = dict(raw_all_blast.groupby('cog').apply(lambda df : {ii: len(set(df.loc[df['evalue'] < 10**-ii].subject)) for ii in list(range(3,10))+[20,30,40,50] } ))
+min_seq = 250
+min_cutoff = lambda dd, v : min({ k : vv for k, vv in dd.items() if vv > min_seq }.items(), key=lambda x : x[1])
+cutoffs = {cog : (min_cutoff(v, min_seq) if max(v.values()) > min_seq else max(v.items(), key=lambda t : t[1]))[0] for cog, v in cutoffs.items()}
+hits = dict(raw_all_blast.groupby('cog').apply(lambda df : set(df.loc[df['evalue'] < 10**-cutoffs[list(df['cog'])[0]]].subject) ))
+
+from Bio import Entrez
+Entrez.email = "murumbii@gmail.com"
+
+homos = dict()
+for k, ids in tqdm(hits.items()):
+    if not homos.get(k):
+        with Entrez.efetch(db="protein", rettype="gp", retmode="text", id=list(ids)) as handle:
+            homos[k] = [s for s in SeqIO.parse(handle, "genbank")]
+
+
+[ SeqIO.write([ SeqRecord(id = c.name + ";" + Genome.find_one(cc.genome).name , seq =cc.protein, description = "") for cc in c.feature_list ] + homos[c.name], pjoin(temp_root, "130_other" , c.name , c.name + "_with_hits.faa"), "fasta") for c in cogs if c.name in ll]
+taxas = {s.id : s.annotations['taxonomy'] for s in sum(homos.values(), [])}
+
+all_phyla = [t[1] for t in taxas.values() if len(t) > 2]
+all_phyla_sub = [s for s in set(all_phyla) if all_phyla.count(s)  > 300] + ['acI']
+
+
+
+[ SeqIO.write([ SeqRecord(id = str(i).zfill(2) + "_" + c.name + "_" + Genome.find_one(cc.genome).name , seq =cc.protein, description = "") for i, cc in enumerate(c.feature_list) ], pjoin(temp_root, "130_other" , "more_trees", "fastas" , "rax_" +  c.name + ".faa"), "fasta") for c in cogs]
+
+for c in cogs:
+#    if c.name in ll:
+        scr = raxml_slurm_script.format(name = c.name)
+        with open(pjoin(temp_root, "130_other", "more_trees", "scripts",  "rax_" + c.name + ".sh"), "w") as handle:
+            handle.writelines(scr)
+
+for c in cogs:
+    if c.name in ll and not c.name == 'acIfull00695' :
+        print("making tree for ", c.name)
+        make_tree_fig(pjoin(temp_root, "130_other", c.name, c.name + ".tree"), pjoin(temp_root, "130_other", c.name, c.name + ".pdf"))

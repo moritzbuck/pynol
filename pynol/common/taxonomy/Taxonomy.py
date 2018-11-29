@@ -52,3 +52,10 @@ class Taxonomy():
                 return False
             parent = child
         return True
+
+    def check_monophyly(self, taxa_list):
+        tax_set ={ i : set([self[Taxon.prefixes[i] + t.get_parent(i)] for t in taxa_list if t.get_parent(i) ]) for i in range(7)}
+        if len({ k : v for k,v in tax_set.items() if len(v) >1}) > 0:
+            return False
+        else :
+            return True

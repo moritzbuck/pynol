@@ -39,5 +39,9 @@ class Sequence( Thingy ):
             assert not self.__class__.find_one({'_pretty_id' : self.pretty_id}), "The pretty id {tag} is already in the db".format(tag = self.pretty_id)
         Thingy.save(self)
 
-
+    def diff(sequence):
+        s1 = str(self.sequence)
+        s2 = str(sequence)
+        assert len(s1) == len(s2), "this is only end to end hamilton distance!"
+        return sum([a!=b for a,b in zip(s1 , s2)])
 # Operations

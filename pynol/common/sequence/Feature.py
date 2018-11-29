@@ -82,7 +82,7 @@ class Feature( Nucleotide ):
     @classmethod
     def fromGFFline(cls, line):
         obj = cls()
-        genomic = Genomic.find_one({'_pretty_id' : line[0]})
+        genomic = Genomic.find_one({'_id' : ObjectId(line[0])})
         start = int(line[3])
         end = int(line[4])
         rev_comp = line[6] == '-'
