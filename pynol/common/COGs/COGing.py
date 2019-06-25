@@ -7,6 +7,7 @@ from pynol.common.genome.Genome import Genome
 from bson.objectid import ObjectId
 import subprocess
 import igraph
+from math import ceil
 
 class COGing( Thingy ):
     """docstring for COG."""
@@ -86,7 +87,7 @@ class COGing( Thingy ):
         return self._cog2genome
 
 
-    def precluster(self, file, simi = 99):
+    def precluster(self, file, simi = 95):
         if Genome.find_one().species_cluster:
             g2clust = {g.id : g.species_cluster for g in Genome.find()}
             genome_clusters = [[] for x in range(max(g2clust.values())+1)]
@@ -126,14 +127,16 @@ class COGing( Thingy ):
                 for cog in cogs :
                     c2g_index[cog] += [species]
             c2g_index = { cog : set(species) for cog, species in c2g_index.items()}
+            if genome_set :
+                genome_set = set([g.species_cluster for g in genome_set])
         else :
             c2g_index = {c : set([gg.id for gg in g]) for c,g in self.cog2genome.items()}
+            if genome_set :
+                    genome_set = set([s.id for s in genome_set])
+        if genome_set:
+            c2g_index = {k : genome_set.intersection(v) for k,v in c2g_index.items()}
 
-        if genome_set :
-            genome_set_index = set([g.species_cluster for g in genome_set])
-            c2g_index = {k : genome_set_index.intersection(v) for k,v in c2g_index.items()}
-
-        c2g_index = {k : v for k,v in c2g_index.items() if len(v) > cutoff}
+        c2g_index = {k : v for k,v in c2g_index.items() if len(v) > ceil(cutoff)}
 
         dists = { (k1,k2) : dist(c1,c2) for k1,c1 in tqdm(c2g_index.items()) for k2,c2 in tqdm(c2g_index.items())}
         return dists
@@ -168,12 +171,12 @@ class COGing( Thingy ):
 
         with open("{taxon}.R".format(taxon = str(name)), "w") as handle:
             handle.writelines(rscript.format(taxon = str(name)))
-        subprocess.call("Rscript {taxon}.R".format(taxon = str(name)), shell=True)
+        #subprocess.call("Rscript {taxon}.R".format(taxon = str(name)), shell=True)
 
-        with open("{taxon}.core.csv".format(taxon = str(name))) as handle:
-            core = set([ObjectId(l[:-1]) for l in handle])
+#        with open("{taxon}.core.csv".format(taxon = str(name))) as handle:
+#            core = set([ObjectId(l[:-1]) for l in handle])
 
-        return core
+#        return core
 #        return None
 
 class COGIterator():

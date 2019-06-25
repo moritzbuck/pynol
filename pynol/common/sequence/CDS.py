@@ -26,9 +26,9 @@ class CDS( Feature ):
         score = "."
         strand = "."
         phase = "."
-        atts = [ k + "=" + v for k,v in self.more.items()]
+        atts = [ "ID=" + self.pretty_id] + [ k + "=" + v for k,v in self.more.items()]
         if self.cog:
             cc = COG.find_one(self.cog)
-            atts += [ "COG_name=" + cc.name, "COG_fct=" + ":".join([str(v) for v in cc.get_function()])  ]
+            atts += [ "COG_name=" + cc.name  ]#, "COG_fct=" + ":".join([str(v) for v in cc.get_function()])  ]
         atts = ";".join(atts)
         return "\t".join([contig, source, typ, start, end, score, strand, phase, atts]) + "\n"

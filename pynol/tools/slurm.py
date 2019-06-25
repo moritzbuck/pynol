@@ -27,7 +27,7 @@ class Slurm(object):
 {commands}
 """
 
-    def run_remote(self, job_name, command, files, threads = 20, folder = "/home/moritz/temp/", time = '10-00:00:00', project = "snic2017-1-616", email = "murumbii@google.com"):
+    def run_remote(self, job_name, command, files, threads = 20, folder = "/home/moritz/temp/", time = '10-00:00:00', project = "snic2019-3-59", email = "murumbii@google.com"):
         script = self.slurm_script.format(
             folder = folder,
             job_name = job_name,

@@ -47,3 +47,18 @@ class COG( Thingy ):
         product_fraction = best_product[1]/len(feats)
         hyp_fraction = hyp_count/len(feats)
         return (best_product[0] , product_fraction, hyp_fraction)
+
+
+    def ec_number(self):
+        feats = self.feature_list
+        data = [f.more for f in feats]
+        product = [d.get('eC_number')for d in data]
+        hyp_count = product.count(None)
+        product = [p for p in product if p != None]
+        if len(product) > 0:
+            best_product = max({s : product.count(s) for s in set(product)}.items(), key = lambda x : x[1])
+        else :
+            return ('hypothetical protein', 1.0, 1.0)
+        product_fraction = best_product[1]/len(feats)
+        hyp_fraction = hyp_count/len(feats)
+        return (best_product[0] , product_fraction, hyp_fraction)
